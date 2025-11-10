@@ -12,7 +12,7 @@ jobs:
       - name: Set tag name from short SHA
         id: set_tag
         run: echo "tag=build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-        
+
       - name: Install GitHub CLI if not present
         run: |
           if ! command -v gh &> /dev/null; then
@@ -23,22 +23,59 @@ jobs:
             echo "gh CLI already installed."
           fi
 
+      - name: Check release status
+        id: check_release_status
+        run: |
+          response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.set_tag.outputs.tag }})
+          if echo "$response" | grep -q "Not Found"; then
+            echo "status=none" >> $GITHUB_OUTPUT
+          elif echo "$response" | grep -q "in_progress"; then
+            echo "status=in_progress" >> $GITHUB_OUTPUT
+          else
+            echo "status=ready" >> $GITHUB_OUTPUT
+
+      - name: Wait until release is no longer in progress
+        if: steps.check_release_status.outputs.status == 'in_progress'
+        run: |
+          echo "Waiting for release to finish..."
+          while true; do
+            response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.set_tag.outputs.tag }})
+            if echo "$response" | grep -q "Not Found"; then
+              echo "Release not found anymore. Proceeding..."
+              break
+            elif ! echo "$response" | grep -q "in_progress"; then
+              echo "Release is ready. Proceeding..."
+              break
+            fi
+            echo "Still in progress. Sleeping for 10 seconds..."
+            sleep 10
+          done
+
+      - name: Create in-progress release
+        if: steps.check_release_status.outputs.status == 'none'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          echo "Creating in-progress release..."
+          gh release create ${{ steps.set_tag.outputs.tag }} \
+            --title "Build ${{ steps.set_tag.outputs.tag }}" \
+            --notes "in_progress"
+
       - name: Check if artifact exists in release
         id: check_release
         run: |
           response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.set_tag.outputs.tag }})
-          if echo "$response" | grep -q "Not Found"; then
-            echo "exists=false" >> $GITHUB_OUTPUT
-          else
+          if echo "$response" | grep -q "diff.zip"; then
             echo "exists=true" >> $GITHUB_OUTPUT
-          fi  # <-- This was missing
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
 
       - name: Download artifact from release
         if: steps.check_release.outputs.exists == 'true'
         run: |
           echo "Downloading artifact from release..."
           curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/diff.zip
-          curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/modifications.xml
+          curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/modifications.xml
 
       - name: Skip build if artifact exists
         if: steps.check_release.outputs.exists == 'true'
@@ -64,6 +101,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          gh release create ${{ steps.set_tag.outputs.tag }} diff.zip modifications.xml \
-            --title "Build ${{ steps.set_tag.outputs.tag }}" \
-            --notes "Automated build artifacts"
+          gh release upload ${{ steps.set_tag.outputs.tag }} diff.zip modifications.xml
+
+      - name: Update release notes
+        if: steps.check_release.outputs.exists != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh release edit ${{ steps.set_tag.outputs.tag }} \
