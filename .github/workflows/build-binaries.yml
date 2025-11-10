@@ -19,11 +19,12 @@ jobs:
       - name: Check if artifact exists in release
         id: check_release
         run: |
-          response=$(curl -s https://api.github.com/${{ github.repository }}/releases/tags/${{ github.sha }})
+          response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.sha }})
           if echo "$response" | grep -q "Not Found"; then
             echo "exists=false" >> $GITHUB_OUTPUT
           else
             echo "exists=true" >> $GITHUB_OUTPUT
+          fi  # <-- This was missing
 
       - name: Download artifact from release
         if: steps.check_release.outputs.exists == 'true'
