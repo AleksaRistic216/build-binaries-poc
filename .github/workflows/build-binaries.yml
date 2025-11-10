@@ -60,7 +60,7 @@ jobs:
       - name: Mock build
         run: |
           echo "Building binaries..."
-          sleep 300  # Simulate 5 minute build time
+          sleep 30  # Simulate 30 sec build time
           echo "Build completed."
       - name: Create artifacts
         run: |
