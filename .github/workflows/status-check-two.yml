@@ -2,6 +2,8 @@ name: status-check-two.yml
 on:
   workflow_dispatch:
   pull_request:
+    branches:
+      - main
 
 jobs:
   build:
