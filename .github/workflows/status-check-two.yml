@@ -1,0 +1,25 @@
+name: my-tests.yml
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-binaries.yml
+    secrets: inherit
+  
+  test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifact from release
+      if: steps.check_release.outputs.exists == 'true'
+      run: |
+        echo "Downloading artifact from release..."
+        curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/diff.zip
+        curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/modifications.xml
+        
+    - name: List files
+      run: |
+        echo "Listing downloaded files..."
+        ls -la
