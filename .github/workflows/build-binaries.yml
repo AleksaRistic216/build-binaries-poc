@@ -59,9 +59,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           echo "Creating in-progress release..."
-          gh release create ${{ steps.set_tag.outputs.tag }} \
+          if ! gh release create ${{ steps.set_tag.outputs.tag }} \
             --title "Build ${{ steps.set_tag.outputs.tag }}" \
-            --notes "in_progress"
+            --notes "in_progress"; then
+            echo "Release creation failed, likely due to race condition. Re-checking status..."
+            response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.set_tag.outputs.tag }})
+            if echo "$response" | grep -q "Not Found"; then
+              echo "Release still not found. Failing workflow."
+              exit 1
+            elif echo "$response" | grep -q "in_progress"; then
+              echo "Release is in progress. Proceeding..."
+            else
+              echo "Release is ready. Proceeding..."
+            fi
+          fi
+
 
       - name: Check if artifact exists in release
         id: check_release
