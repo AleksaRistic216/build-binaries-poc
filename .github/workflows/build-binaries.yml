@@ -87,7 +87,7 @@ jobs:
         if: steps.check_release.outputs.exists != 'true'
         run: |
           echo "Building binaries..."
-          sleep 10
+          sleep 60  # Simulate build time
           echo "Build completed."
 
       - name: Create artifacts
