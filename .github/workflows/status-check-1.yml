@@ -18,6 +18,8 @@ jobs:
             const labels = context.payload.pull_request?.labels.map(l => l.name) || [];
             return labels.includes(label);
 
+      # Can go without this part but use native thing from github, however not sure at this moment how it is
+      # Explanation can be found at this exact action actually
       - name: Cancel workflow if label not present
         if: steps.check_label.outputs.result != 'true'
         uses: styfle/cancel-workflow-action@0.12.0
