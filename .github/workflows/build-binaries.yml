@@ -1,0 +1,79 @@
+name: build-binaries.yml
+on:
+  workflow_dispatch:
+
+jobs:
+  testbuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check if build status file exists and is in progress
+        id: check_status
+        run: |
+          if [ -f build_status_${{ github.sha }}.txt ]; then
+            status=$(cat build_status_${{ github.sha }}.txt)
+            if [ "$status" = "in_progress" ]; then
+              echo "Build is in progress."
+              echo "inProgress=true" >> $GITHUB_OUTPUT
+            else
+              echo "Build status is not 'in_progress'."
+              echo "inProgress=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Build status file does not exist."
+            echo "inProgress=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Wait for build to complete or timeout
+        if: steps.check_status.outputs.inProgress == 'true'
+        run: |
+          timeout=600  # 10 minutes
+          interval=10
+          elapsed=0
+          
+          while [ $elapsed -lt $timeout ]; do
+            status=$(cat build_status_${{ github.sha }}.txt 2>/dev/null || echo "not_found")
+            if [ "$status" = "completed" ]; then
+              echo "Build marked as completed."
+              exit 0
+            fi
+            sleep $interval
+            elapsed=$((elapsed + interval))
+          done
+          
+          echo "Timeout reached. Build not marked as completed."
+          exit 1
+      - name: Check if artifact exists
+        id: check-artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: diff-${{github.sha}}
+          path: |
+            diff.zip
+            modifications.xml
+      - name: Skip build if artifact exists
+        if: steps.check-artifact.outcome == 'success'
+        run: echo "Artifact already exists, skipping build."
+      - name: Mark build as in progress
+        run: echo "in_progress" > build_status_${{ github.sha }}.txt
+      - name: Mock build
+        run: |
+          echo "Building binaries..."
+          sleep 300  # Simulate 5 minute build time
+          echo "Build completed."
+      - name: Create artifacts
+        run: |
+          echo "Creating artifacts..."
+          echo "This is a mock diff file." > diff.txt
+          zip diff.zip diff.txt
+          echo "<modifications><modification>Mock modification</modification></modifications>" > modifications.xml
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-${{github.sha}}
+          path: |
+            diff.zip
+            modifications.xml
+      - name: Mark build as in progress
+        run: echo "completed" > build_status_${{ github.sha }}.txt
