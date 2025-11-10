@@ -6,6 +6,24 @@ on:
       - main
 
 jobs:
+  check-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for label winforms-xtraproducts-tests
+        id: check_label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = 'winforms-xtraproducts-tests';
+            const labels = context.payload.pull_request?.labels.map(l => l.name) || [];
+            return labels.includes(label);
+
+      - name: Cancel if label not present
+        if: steps.check_label.outputs.result != 'true'
+        run: |
+          echo "Required label not present. Cancelling workflow."
+          exit 1
+  
   build:
     uses: ./.github/workflows/build-binaries.yml
     secrets: inherit
@@ -14,14 +32,14 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
     steps:
-    - name: Download artifact from release
-      if: steps.check_release.outputs.exists == 'true'
-      run: |
-        echo "Downloading artifact from release..."
-        curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/diff.zip
-        curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/modifications.xml
-        
-    - name: List files
-      run: |
-        echo "Listing downloaded files..."
-        ls -la
+      - name: Download artifact from release
+        if: steps.check_release.outputs.exists == 'true'
+        run: |
+          echo "Downloading artifact from release..."
+          curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/diff.zip
+          curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/modifications.xml
+
+      - name: List files
+        run: |
+          echo "Listing downloaded files..."
+          ls -la
