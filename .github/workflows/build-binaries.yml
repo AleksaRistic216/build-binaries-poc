@@ -26,7 +26,7 @@ jobs:
       - name: Check if artifact exists in release
         id: check_release
         run: |
-          response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG)
+          response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.set_tag.outputs.tag }})
           if echo "$response" | grep -q "Not Found"; then
             echo "exists=false" >> $GITHUB_OUTPUT
           else
@@ -37,7 +37,7 @@ jobs:
         if: steps.check_release.outputs.exists == 'true'
         run: |
           echo "Downloading artifact from release..."
-          curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/diff.zip
+          curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ steps.set_tag.outputs.tag }}/diff.zip
           curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/modifications.xml
 
       - name: Skip build if artifact exists
@@ -48,7 +48,7 @@ jobs:
         if: steps.check_release.outputs.exists != 'true'
         run: |
           echo "Building binaries..."
-          sleep 30
+          sleep 10
           echo "Build completed."
 
       - name: Create artifacts
