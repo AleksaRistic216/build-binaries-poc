@@ -19,7 +19,7 @@ jobs:
       - name: Check if artifact exists in release
         id: check_release
         run: |
-          response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.sha }})
+          response=$(curl -s https://api.github.com/repos/AleksaRistic216/build-binaries-poc/releases/tags/${{ github.sha }})
           if echo "$response" | grep -q "Not Found"; then
             echo "exists=false" >> $GITHUB_OUTPUT
           else
