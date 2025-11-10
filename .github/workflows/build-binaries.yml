@@ -3,77 +3,59 @@ on:
   workflow_dispatch:
 
 jobs:
-  testbuild:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Check if build status file exists and is in progress
-        id: check_status
+      - name: Install GitHub CLI if not present
         run: |
-          if [ -f build_status_${{ github.sha }}.txt ]; then
-            status=$(cat build_status_${{ github.sha }}.txt)
-            if [ "$status" = "in_progress" ]; then
-              echo "Build is in progress."
-              echo "inProgress=true" >> $GITHUB_OUTPUT
-            else
-              echo "Build status is not 'in_progress'."
-              echo "inProgress=false" >> $GITHUB_OUTPUT
-            fi
+          if ! command -v gh &> /dev/null; then
+            echo "gh CLI not found. Installing..."
+            sudo apt update
+            sudo apt install gh -y
           else
-            echo "Build status file does not exist."
-            echo "inProgress=false" >> $GITHUB_OUTPUT
+            echo "gh CLI already installed."
           fi
-      
-      - name: Wait for build to complete or timeout
-        if: steps.check_status.outputs.inProgress == 'true'
+
+      - name: Check if artifact exists in release
+        id: check_release
         run: |
-          timeout=600  # 10 minutes
-          interval=10
-          elapsed=0
-          
-          while [ $elapsed -lt $timeout ]; do
-            status=$(cat build_status_${{ github.sha }}.txt 2>/dev/null || echo "not_found")
-            if [ "$status" = "completed" ]; then
-              echo "Build marked as completed."
-              exit 0
-            fi
-            sleep $interval
-            elapsed=$((elapsed + interval))
-          done
-          
-          echo "Timeout reached. Build not marked as completed."
-          exit 1
-      - name: Check if artifact exists
-        id: check-artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: diff-${{github.sha}}
-          path: |
-            diff.zip
-            modifications.xml
+          response=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.sha }})
+          if echo "$response" | grep -q "Not Found"; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "exists=true" >> $GITHUB_OUTPUT
+
+      - name: Download artifact from release
+        if: steps.check_release.outputs.exists == 'true'
+        run: |
+          echo "Downloading artifact from release..."
+          curl -L -o diff.zip https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/diff.zip
+          curl -L -o modifications.xml https://github.com/${{ github.repository }}/releases/download/${{ github.sha }}/modifications.xml
+
       - name: Skip build if artifact exists
-        if: steps.check-artifact.outcome == 'success'
+        if: steps.check_release.outputs.exists == 'true'
         run: echo "Artifact already exists, skipping build."
-      - name: Mark build as in progress
-        run: echo "in_progress" > build_status_${{ github.sha }}.txt
-      - name: Mock build
+
+      - name: Build binaries
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           echo "Building binaries..."
-          sleep 30  # Simulate 30 sec build time
+          sleep 30
           echo "Build completed."
+
       - name: Create artifacts
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           echo "Creating artifacts..."
           echo "This is a mock diff file." > diff.txt
           zip diff.zip diff.txt
           echo "<modifications><modification>Mock modification</modification></modifications>" > modifications.xml
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: diff-${{github.sha}}
-          path: |
-            diff.zip
-            modifications.xml
-      - name: Mark build as in progress
-        run: echo "completed" > build_status_${{ github.sha }}.txt
+
+      - name: Upload artifacts to release
+        if: steps.check_release.outputs.exists != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.sha }} diff.zip modifications.xml \
+            --title "Build ${{ github.sha }}" \
+            --notes "Automated build artifacts"
